@@ -1,0 +1,235 @@
+<!DOCTYPE>
+<html>
+
+<head>
+</head>
+
+<body>
+    <div id="alert" style="color:red;font-weight:bold"></div>
+    <b>Note: For testing purposes, the client authentication token is cleared when this page is re-loaded. This is effectively the same as logging out.</b>
+    <br>
+    <div id="loginForm">
+        username:
+        <input type="text" id="user" value="xyz">
+        <br>password:
+        <input type="password" id="pass" value="xyz">
+        <br>
+        <input type="button" value="Login" id="loginButton">
+    </div>
+    <br>
+    <br>
+    <b>Login status:</b>  <span id="loginStatus"></span>
+    <span id="logout" style="display:none;color:blue;text-decoration:underline">Click here to logout.</span>
+    <br>
+    <br>
+
+    <b>Raw JSON output from API:</b>
+    <br>
+    <div id="out">
+        <pre></pre>
+    </div>
+
+    <br>
+    <br>
+    <b>List configuration items</b>
+    <br>
+    <br>Options:
+    <br>Sort:
+    <select id="listSort">
+        <option value="">None</option>
+        <option value="name">Name</option>
+        <option value="hostname">Hostname</option>
+        <option value="port">Port</option>
+        <option value="username">Username</option>
+    </select>
+    <br>
+    <input type="checkbox" id="pagination">Pagination:
+    <div id="paginationOptions" style="display:none">
+        Start at item number:
+        <input type="text" id="offset" value="">
+        <br>Number of items per page:
+        <input type="text" id="numItems" value="">
+        <br>
+    </div>
+
+    <br>
+    <input type="button" value="Get Items" id="listItems">
+    <div id="gridView">
+
+    </div>
+    <div id="pageControls" style="display:none">
+        <input type="button" value="<< Prev" id="pagePrev">
+        <input type="button" value="Next >>" id="pageNext">
+    </div>
+    <div>
+        <br>
+        <br>
+        <b>Add a configuration item:</b>
+        <br>Name:
+        <input type="text" id="name">
+        <br>Hostname:
+        <input type="text" id="hostname">
+        <br>Port:
+        <input type="text" id="port">
+        <br>Username:
+        <input type="text" id="username">
+        <br>
+        <input type="button" value="Add" id="addItem">
+    </div>
+</body>
+<script type="text/javascript" src="js/jquery-2.1.1.min.js"></script>
+<script type="text/javascript">
+    if (typeof(JSON) == 'undefined') {
+		document.getElementById("alert").innerHTML = "Warning! Your browser does not seem to support the JavaScript JSON library. Please test this code using a more up-to-date browser!";
+    }
+    $(document).ready(function() {
+
+        var loggedInMsg = '<span style="color:green">You are logged in and can use authentication-protected API routes.</span>';
+
+        var loggedOutMsg = '<span style="color:red">You are not logged in and will not be able to access any authentication-protected API routes.</span>';
+
+        $("#loginStatus").html(loggedOutMsg);
+
+        var cookies;
+        var qs = {
+            offset: 0,
+            numItems: 0,
+            sort: ''
+        };
+
+        function dataLength(data) {
+			try{
+                return data.configurations.length;
+			} catch(ex){
+				return 0;
+			}
+        }
+
+        function getCookies() {
+            c = document.cookie.split('; ');
+            cookies = {};
+            for (i = c.length - 1; i >= 0; i--) {
+                C = c[i].split('=');
+                cookies[C[0]] = C[1];
+            }
+            if (cookies['auth']) {
+                $("#loginStatus").html(loggedInMsg);
+                $("#logout").show();
+            } else {
+                $("#loginStatus").html(loggedOutMsg);
+            }
+        }
+
+        function getItems(qs) {
+            var qs = qs || {};
+            qs.offset = qs.offset || $("#offset").val();
+            qs.numItems = qs.numItems || $("#numItems").val();
+            qs.sort = qs.sort || $("#listSort").val();
+            $.get("https://testdomain1.com:1771/items", qs, "json")
+                .done(function(data) {
+                    getCookies();
+                    updateGridView(data);
+                    $("#out").html(JSON.stringify(data));
+                    $(".deleteItem").on("click", function() {
+                        deleteItem($(this).attr("name"));
+                    });
+                });
+        }
+
+
+        function deleteItem(name) {
+            $.get("https://testdomain1.com:1771/deleteItem?deleteBy=name&q=" + name, {}, null, "json")
+                .done(function(data) {
+                    $(".deleteItem").on("click", function() {
+                        deleteItem($(this).attr("name"));
+                    });
+                    getItems();
+                });
+        }
+
+        function updateGridView(data) {
+            var html = "";
+            if (dataLength(data) === 0) {
+                html = "no configurations found";
+            } else
+                for (var i = 0; i < dataLength(data); i++) {
+                    var obj = data.configurations[i];
+                    html += obj.name + ' ' + obj.hostname + ' ' + obj.port + ' ' + obj.username + ' <span style="color:blue;text-decoration:underline" class="deleteItem" name="' + obj.name + '">delete this item</span><br>';
+                }
+            $("#gridView").html(html);
+            $("#pageControls").toggle($("#pagination").prop("checked"));
+        }
+
+        $("#loginButton").click(function() {
+            var user = $("#user").val();
+            var pass = $("#pass").val();
+            var loginJson = {
+                username: user,
+                password: pass
+            };
+            $.post("https://testdomain1.com:1771/login", JSON.stringify(loginJson), null, "json")
+                .done(function(data) {
+                    $("#out").html(JSON.stringify(data));
+                    getCookies();
+                });
+        });
+
+        $("#logout").click(function() {
+            $.get("https://testdomain1.com:1771/logout", {}, null, "json")
+                .done(function(data) {
+                    $("#out").html(JSON.stringify(data));
+                    getCookies();
+                });
+			$(this).toggle();
+        });
+        $("#listItems").click(function() {
+            if ($("#listSort").val() !== "")
+                qs.sort = $("#listSort").val();
+            if ($("#pagination").prop("checked")) {}
+            getItems();
+
+        });
+        $("#addItem").click(function() {
+            var name = $("#name").val();
+            var hostname = $("#hostname").val();
+            var port = $("#port").val();
+            var username = $("#username").val();
+            var newConfig = {
+                name: name,
+                hostname: hostname,
+                port: port,
+                username: username
+            };
+
+            $.post("https://testdomain1.com:1771/addItem", JSON.stringify(newConfig), null, "json")
+                .done(function(data) {
+                    updateGridView(data);
+                    $("#out").html(JSON.stringify(data));
+                    $(".deleteItem").on("click", function() {
+                        deleteItem($(this).attr("name"));
+                    });
+                    getCookies();
+                });
+        });
+
+        $("#pagination").change(function() {
+            $("#paginationOptions").toggle(this.checked);
+        });
+        $("#pagePrev").click(function() {
+            qs.offset = qs.offset || $("#offset").val();
+            qs.numItems = qs.numItems || $("#numItems").val();
+            if (qs.offset > 0)
+                if (qs.offset - qs.numItems < 0) qs.offset = 0;
+                else qs.offset -= qs.numItems;
+            getItems(qs);
+        });
+        $("#pageNext").click(function() {
+            qs.offset = qs.offset || $("#offset").val();
+            qs.numItems = qs.numItems || $("#numItems").val();
+            qs.offset = (parseInt(qs.offset) + parseInt(qs.numItems));
+            getItems(qs);
+        });
+    });
+</script>
+
+</html>
